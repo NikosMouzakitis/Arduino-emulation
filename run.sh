@@ -1,3 +1,2 @@
 #!/bin/bash
-qemu-system-avr -cpu atmega328p -bios /dev/null -serial mon:stdio -drive file=blinky.hex,format=ihex
-
+simavr -m atmega328p -f 16000000 build-uno/Arduino-emulation.elf
