@@ -39,7 +39,7 @@ void task1(void) {
 void task2(void) {
     while (1) {
         Serial.println("Hello from Task 2!");
-        delay(1000);
+        delay(500);
         avr_swapcontext(&tasks[1].ctx, &tasks[0].ctx);
     }
 }
@@ -56,7 +56,7 @@ void setup() {
     Serial.println("issuing sei");
     sei();  // Enable global interrupts
 
-    // Initialize task contexts
+    // Initialize task contexts for the two tasks.
     for (int i = 0; i < 2; i++) {
         avr_getcontext(&tasks[i].ctx);
         avr_makecontext(&tasks[i].ctx, tasks[i].stack, STACK_SIZE, NULL, tasks[i].task_func, NULL);
@@ -65,10 +65,8 @@ void setup() {
     // Start the first task(tasks[0])
     avr_setcontext(&tasks[0].ctx);
 }
-
+//never executing the loop
 void loop() {
     Serial.println("Running main task...");
     delay(1000);
 }
-
-
