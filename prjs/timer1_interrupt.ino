@@ -13,12 +13,17 @@ void setup() {
     sei();  // Enable global interrupts
 }
 
+//interrupt to run each time the timer fires.
 ISR(TIMER1_COMPA_vect) {
     Serial.println("fired");
 }
 
+
+
 void loop() {
     Serial.println("Running main task...");
+
+
     delay(1000);
 }
 
