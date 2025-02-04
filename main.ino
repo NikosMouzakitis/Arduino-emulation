@@ -3,83 +3,85 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avrcontext_arduino.h>
-
 #define STACK_SIZE 128
+#define NUM_TASKS 2
 
-//used for context switching.
-avr_context_t *current_ctx;
-avr_context_t *next_ctx;
-avr_context_t *tmp_ctx;
+// Task states
+typedef enum {
+    READY,
+    RUNNING,
+    BLOCKED
+} task_state_t;
 
-
-//interrupt to run each time the timer fires.
-ISR(TIMER1_COMPA_vect) {
-    Serial.println("fired");
-    //context switch
-    tmp_ctx = current_ctx;
-    current_ctx = next_ctx;
-    next_ctx = tmp_ctx;
-
-    avr_swapcontext(next_ctx, current_ctx);
-}
-// Declare task functions
-void task1(void);
-void task2(void);
-
-// Define the task structure
-typedef struct {
+// Task structure
+typedef struct task {
     avr_context_t ctx;
     uint8_t stack[STACK_SIZE];
     void (*task_func)(void);
+    task_state_t state;
+    struct task *next; // Circular linked list
 } task_t;
 
-// Initialize tasks
-task_t tasks[2] = {
-    {{0}, {0}, task1},
-    {{0}, {0}, task2}
-};
+// Task function prototypes
+void task1(void);
+void task2(void);
+
+// Task instances
+task_t tasks[NUM_TASKS];
+task_t *current_task;
+
+// Interrupt Service Routine for Timer1
+ISR(TIMER1_COMPA_vect) {
+    task_t *prev_task = current_task;
+    do {
+        current_task = current_task->next; // Move to next task
+    } while (current_task->state != READY); // Find a READY task
+    avr_swapcontext(&prev_task->ctx, &current_task->ctx);
+}
 
 // Task functions
 void task1(void) {
     while (1) {
-        Serial.println("Hello from Task 1");
-	delay(1000);
+        Serial.println("Task 1 running");
+        _delay_ms(1000);
     }
 }
 
 void task2(void) {
     while (1) {
-        Serial.println("Hello from Task 2!");
-        delay(500);
+        Serial.println("Task 2 running");
+        _delay_ms(500);
     }
 }
+void isr_timer_init(void)
+{
+    // Configure Timer1 for task switching
+    TCCR1A = 0;
+    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);
+    OCR1A = 31249; // Adjust for desired timing
+    TIMSK1 |= (1 << OCIE1A);
 
+}
 void setup() {
-	//setup serial com.
     Serial.begin(9600);
-   
-    // Configure Timer1 for interrupts
-    TCCR1A = 0;                     // Normal mode
-    TCCR1B = (1 << WGM12) | (1 << CS11) | (1 << CS10);  // CTC mode, Prescaler 64
-    OCR1A = 31249;                    //adjust time of interrupt. 
-    TIMSK1 |= (1 << OCIE1A);         // Enable Compare A Match Interrupt
-    Serial.println("issuing sei");
-    sei();  // Enable global interrupts
+    isr_timer_init();    
+    sei(); // Enable global interrupts
 
-    // Initialize task contexts for the two tasks.
-    for (int i = 0; i < 2; i++) {
+    // Initialize tasks
+    tasks[0].task_func = task1;
+    tasks[1].task_func = task2;
+    for (int i = 0; i < NUM_TASKS; i++) {
         avr_getcontext(&tasks[i].ctx);
         avr_makecontext(&tasks[i].ctx, tasks[i].stack, STACK_SIZE, NULL, tasks[i].task_func, NULL);
+        tasks[i].state = READY;
+        tasks[i].next = &tasks[(i + 1) % NUM_TASKS]; // Circular linked list
     }
-    //set up context pointers.
-    current_ctx = &tasks[0].ctx;
-    next_ctx = &tasks[1].ctx;
 
-    // Start the first task(tasks[0])
-    avr_setcontext(current_ctx);
+    current_task = &tasks[0]; // Start with the first task
+    avr_setcontext(&current_task->ctx);
 }
-//never executing the loop
+
 void loop() {
-    Serial.println("Running main task...");
-    delay(1000);
+    // Main loop should remain empty; tasks run in context switching
 }
+
